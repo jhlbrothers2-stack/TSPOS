@@ -1,2 +1,3 @@
-# TSPOS
-Just a fun terminal based os it would be nice if people made some packages to run as well. Just to like you know build the usability up of it. Its just a fun project i did and now its out here of course i will still be making new versions likely.
+extract this zip by right clicking it and press extract all. Extract it into any place you want just by having the zip file in the folder you want it extracted to. Once you have done that open index.html and you can begin. 
+
+I AM NOT LIABLE FOR ANYTHING THAT HAPPENS WITH ANYTHING BECAUSE OF WHAT THIS IS. USE AND DO THIS AT YOUR OWN RISK.
