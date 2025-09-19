@@ -1,14 +1,25 @@
-// commands.js - Core command package for TSPOS Terminal
+// commands.js - Core TSPOS Commands
 window.commands = window.commands || {};
+window.cwd = "/"; // Global current working directory
+
+function resolvePath(fs, path) {
+  if (!path || path === ".") return window.cwd;
+  if (path === "..") {
+    const parts = window.cwd.split("/").filter(Boolean);
+    parts.pop();
+    return "/" + parts.join("/");
+  }
+  if (path.startsWith("/")) return fs.normalize(path);
+  return fs.normalize(window.cwd + "/" + path);
+}
 
 commands.help = {
   desc: "Show this help message",
   fn(args, print) {
-    let helpText = "Available commands:\n";
-    for (const [name, cmd] of Object.entries(window.commands)) {
-      helpText += `  ${name.padEnd(12)} - ${cmd.desc || "No description"}\n`;
-    }
-    print(helpText);
+    print("Available commands:\n" +
+      Object.entries(commands)
+        .map(([name, cmd]) => `  ${name.padEnd(12)} - ${cmd.desc || "No description"}`)
+        .join("\n"));
   }
 };
 
@@ -23,24 +34,37 @@ commands.clear = {
   desc: "Clear the terminal screen",
   fn(args, print) {
     const terminal = document.getElementById("terminal");
-    if (terminal) terminal.innerText = "";
-    print("Terminal cleared");
+    if (terminal) terminal.innerHTML = "";
+  }
+};
+
+commands.cd = {
+  desc: "Change directory",
+  fn(args, print, fs) {
+    const path = resolvePath(fs, args[0] || "/");
+    const node = fs.getNode(path);
+    if (!node) return print(`cd: ${path}: No such file or directory`);
+    if (typeof node !== "object") return print(`cd: ${path}: Not a directory`);
+    window.cwd = path;
+    print(`Now in ${path}`);
+  }
+};
+
+commands.pwd = {
+  desc: "Print working directory",
+  fn(args, print) {
+    print(window.cwd);
   }
 };
 
 commands.ls = {
-  desc: "List files in directory",
+  desc: "List directory contents",
   fn(args, print, fs) {
-    const path = args[0] || "/";
-    if (!fs.exists(path)) {
-      print(`ls: ${path}: No such file or directory`, "error");
-      return;
-    }
+    const path = resolvePath(fs, args[0] || ".");
+    const node = fs.getNode(path);
+    if (!node) return print(`ls: ${path}: No such file or directory`);
+    if (typeof node !== "object") return print(`ls: ${path}: Not a directory`);
     const list = fs.ls(path);
-    if (!Array.isArray(list)) {
-      print(`ls: ${path}: Not a directory`, "error");
-      return;
-    }
     print(list.join("  "));
   }
 };
@@ -48,20 +72,10 @@ commands.ls = {
 commands.cat = {
   desc: "Show file contents",
   fn(args, print, fs) {
-    const path = args[0];
-    if (!path) {
-      print("cat: missing file operand", "error");
-      return;
-    }
-    if (!fs.exists(path)) {
-      print(`cat: ${path}: No such file or directory`, "error");
-      return;
-    }
+    const path = resolvePath(fs, args[0]);
     const node = fs.getNode(path);
-    if (typeof node === "object") {
-      print(`cat: ${path}: Is a directory`, "error");
-      return;
-    }
+    if (!node) return print(`cat: ${path}: No such file`);
+    if (typeof node === "object") return print(`cat: ${path}: Is a directory`);
     print(node);
   }
 };
@@ -69,77 +83,59 @@ commands.cat = {
 commands.touch = {
   desc: "Create empty file or update timestamp",
   fn(args, print, fs) {
-    const path = args[0];
-    if (!path) {
-      print("touch: missing file operand", "error");
-      return;
-    }
+    const path = resolvePath(fs, args[0]);
     const exists = fs.exists(path);
-    if (exists) {
-      // Update the file content unchanged
-      const content = fs.getNode(path);
-      fs.setNode(path, content);
-      print(`Updated timestamp for '${path}'`);
-    } else {
-      // Create empty file
-      fs.setNode(path, "");
-      print(`Created file '${path}'`);
-    }
+    const content = exists ? fs.getNode(path) : "";
+    fs.setNode(path, content);
+    print(exists ? `Updated '${path}'` : `Created '${path}'`);
   }
 };
 
 commands.mkdir = {
-  desc: "Create a new directory",
+  desc: "Create directory",
   fn(args, print, fs) {
-    const path = args[0];
-    if (!path) {
-      print("mkdir: missing directory name", "error");
-      return;
-    }
-    if (fs.exists(path)) {
-      print(`mkdir: ${path}: File exists`, "error");
-      return;
-    }
-    if (fs.mkdir(path)) {
-      print(`Created directory '${path}'`);
-    } else {
-      print(`mkdir: failed to create '${path}'`, "error");
-    }
+    const path = resolvePath(fs, args[0]);
+    if (fs.exists(path)) return print(`mkdir: cannot create '${path}': File exists`);
+    fs.setNode(path, {});
+    print(`Directory '${path}' created`);
   }
 };
 
 commands.rm = {
-  desc: "Remove file or empty directory",
+  desc: "Remove file or directory",
   fn(args, print, fs) {
-    const path = args[0];
-    if (!path) {
-      print("rm: missing operand", "error");
-      return;
-    }
-    if (!fs.exists(path)) {
-      print(`rm: cannot remove '${path}': No such file or directory`, "error");
-      return;
-    }
-    try {
-      fs.rm(path);
-      print(`Removed '${path}'`);
-    } catch (err) {
-      print(`rm: failed to remove '${path}': ${err.message}`, "error");
-    }
+    const path = resolvePath(fs, args[0]);
+    if (!fs.exists(path)) return print(`rm: '${path}': No such file or directory`);
+    fs.rm(path);
+    print(`Removed '${path}'`);
   }
 };
 
-commands.pwd = {
-  desc: "Print working directory",
-  fn(args, print) {
-    print("/home/user");
+commands.mv = {
+  desc: "Move or rename a file",
+  fn(args, print, fs) {
+    const [srcArg, destArg] = args;
+    const src = resolvePath(fs, srcArg);
+    const dest = resolvePath(fs, destArg);
+    const node = fs.getNode(src);
+    if (!node) return print(`mv: cannot stat '${src}': No such file or directory`);
+    fs.setNode(dest, node);
+    fs.rm(src);
+    print(`Moved '${src}' to '${dest}'`);
   }
 };
 
-commands.whoami = {
-  desc: "Show current user",
-  fn(args, print) {
-    print("user");
+commands.cp = {
+  desc: "Copy a file",
+  fn(args, print, fs) {
+    const [srcArg, destArg] = args;
+    const src = resolvePath(fs, srcArg);
+    const dest = resolvePath(fs, destArg);
+    const node = fs.getNode(src);
+    if (typeof node === "object") return print("cp: directories not supported");
+    if (!node) return print(`cp: cannot stat '${src}': No such file`);
+    fs.setNode(dest, node);
+    print(`Copied '${src}' to '${dest}'`);
   }
 };
 
@@ -150,9 +146,93 @@ commands.date = {
   }
 };
 
+commands.whoami = {
+  desc: "Print current user",
+  fn(args, print) {
+    print("user");
+  }
+};
+
 commands.exit = {
-  desc: "Reload the shell",
+  desc: "Reload shell",
   fn() {
     location.reload();
+  }
+};
+
+commands.stat = {
+  desc: "Show file info",
+  fn(args, print, fs) {
+    const path = resolvePath(fs, args[0]);
+    if (!fs.exists(path)) return print(`stat: cannot stat '${path}': No such file or directory`);
+    const node = fs.getNode(path);
+    const type = typeof node === "object" ? "directory" : "file";
+    print(`Path: ${path}\nType: ${type}\nSize: ${node.length || Object.keys(node).length}`);
+  }
+};
+
+commands.head = {
+  desc: "Show first few lines of file",
+  fn(args, print, fs) {
+    const path = resolvePath(fs, args[0]);
+    const node = fs.getNode(path);
+    if (!node || typeof node === "object") return print(`head: ${path}: Invalid file`);
+    const lines = node.split("\n").slice(0, 10);
+    print(lines.join("\n"));
+  }
+};
+
+commands.tail = {
+  desc: "Show last few lines of file",
+  fn(args, print, fs) {
+    const path = resolvePath(fs, args[0]);
+    const node = fs.getNode(path);
+    if (!node || typeof node === "object") return print(`tail: ${path}: Invalid file`);
+    const lines = node.split("\n").slice(-10);
+    print(lines.join("\n"));
+  }
+};
+
+commands.env = {
+  desc: "List environment variables",
+  fn(args, print) {
+    print("USER=user\nSHELL=/bin/tsp\nEDITOR=mini");
+  }
+};
+
+commands.history = {
+  desc: "Show command history",
+  fn(args, print) {
+    if (window.commandHistory) {
+      window.commandHistory.forEach((cmd, idx) => print(`${idx + 1}: ${cmd}`));
+    } else {
+      print("No history found.");
+    }
+  }
+};
+
+commands.basename = {
+  desc: "Show filename from path",
+  fn(args, print) {
+    if (!args[0]) return print("basename: missing operand");
+    const base = args[0].split("/").pop();
+    print(base);
+  }
+};
+
+commands.dirname = {
+  desc: "Show directory name from path",
+  fn(args, print) {
+    if (!args[0]) return print("dirname: missing operand");
+    const parts = args[0].split("/");
+    parts.pop();
+    print(parts.join("/") || "/");
+  }
+};
+
+commands.alias = {
+  desc: "Define an alias (simulated)",
+  fn(args, print) {
+    print("aliasing not supported yet");
   }
 };
