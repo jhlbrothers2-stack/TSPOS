@@ -1,0 +1,22 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if you have any)
+node_modules/
+
+# Environment files
+.env
+
+# Logs
+*.log
+
+# Zip files (if you don’t want to commit them)
+*.zip
+
+# Ignore any .pkg files if you want (optional)
+*.pkg
+
+# Ignore build/dist folders if you have them
+dist/
+build/
