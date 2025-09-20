@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TSPOS Starter</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #0f0;
+      font-family: monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #terminal-wrapper {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #terminal-output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+
+    #input-line {
+      display: flex;
+      border-top: 1px solid #333;
+    }
+
+    #input-line span {
+      padding: 10px;
+    }
+
+    #command-input {
+      flex: 1;
+      background: black;
+      border: none;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 16px;
+      padding: 10px;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal-wrapper">
+    <div id="terminal-output"></div>
+    <div id="input-line">
+      <span>$</span>
+      <input type="text" id="command-input" autofocus />
+    </div>
+  </div>
+
+  <script>
+    window.commands = {};
+    window.cwd = "/";
+    const fs = {
+      data: { "/": {}, "/packages": {} },
+      normalize(path) {
+        return path.replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+      },
+      getNode(path) {
+        const parts = this.normalize(path).split("/").filter(Boolean);
+        let node = this.data["/"];
+        for (const part of parts) {
+          if (!node[part]) return null;
+          node = node[part];
+        }
+        return node;
+      },
+      setNode(path, value) {
+        const parts = this.normalize(path).split("/").filter(Boolean);
+        let node = this.data["/"];
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          node[part] = node[part] || {};
+          node = node[part];
+        }
+        node[parts.at(-1)] = value;
+      },
+      exists(path) {
+        return !!this.getNode(path);
+      },
+      rm(path) {
+        const parts = this.normalize(path).split("/").filter(Boolean);
+        let node = this.data["/"];
+        for (let i = 0; i < parts.length - 1; i++) {
+          node = node[parts[i]];
+          if (!node) return;
+        }
+        delete node[parts.at(-1)];
+      },
+      ls(path) {
+        const node = this.getNode(path);
+        return node && typeof node === "object" ? Object.keys(node) : [];
+      }
+    };
+
+    const terminalOutput = document.getElementById("terminal-output");
+    const commandInput = document.getElementById("command-input");
+
+    function print(text, type = "log") {
+      const div = document.createElement("div");
+      div.textContent = text;
+      div.style.color = type === "error" ? "red" : type === "success" ? "lime" : "#0f0";
+      terminalOutput.appendChild(div);
+      terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    }
+
+    async function runCommand(line, print = console.log, fs, runCommand) {
+      const parts = line.trim().split(" ");
+      const cmd = parts.shift();
+      const command = window.commands[cmd];
+      if (!command) {
+        print(`Command not found: ${cmd}`, "error");
+      } else {
+        await command.fn(parts, print, fs, runCommand);
+      }
+    }
+
+    async function runScript(script, print, fs, runCommand) {
+      for (const line of script) {
+        if (!line || line.trim().startsWith("#")) continue;
+        print(`> ${line}`);
+        await runCommand(line, print, fs, runCommand);
+      }
+    }
+
+    const builtinCommands = {
+      help: {
+        desc: "Show available commands",
+        fn(args, print) {
+          const list = Object.entries(window.commands)
+            .map(([name, cmd]) => `  ${name.padEnd(10)} - ${cmd.desc || "No description"}`)
+            .join("\n");
+          print("Available commands:\n" + list);
+        }
+      },
+      echo: {
+        desc: "Print to screen",
+        fn(args, print) {
+          print(args.join(" "));
+        }
+      },
+      clear: {
+        desc: "Clear terminal",
+        fn() {
+          terminalOutput.innerHTML = "";
+        }
+      },
+      ls: {
+        desc: "List directory",
+        fn(args, print, fs) {
+          const list = fs.ls(args[0] || "/");
+          print(list.join("  "));
+        }
+      },
+      cd: {
+        desc: "Change directory",
+        fn(args, print, fs) {
+          const path = args[0];
+          if (!fs.exists(path)) return print("Directory not found", "error");
+          window.cwd = fs.normalize(path);
+        }
+      },
+      pwd: {
+        desc: "Show current directory",
+        fn(args, print) {
+          print(window.cwd);
+        }
+      },
+      pkg: {
+        desc: "TSPOS package manager",
+        async fn(args, print, fs) {
+          const sub = args[0];
+          if (!sub || sub === "help") {
+            return print(`Usage:
+  pkg make <file.pkg>      - Compile .pkg to executable
+  pkg install <file.js>    - Install JS package from GitHub
+  pkg list                 - List installed packages
+  pkg remove <file.js>     - Delete package`);
+          }
+
+          if (sub === "make") {
+            const filename = args[1];
+            if (!fs.exists(filename)) return print("pkg: file not found", "error");
+            const content = fs.getNode(filename);
+            const match = content.match(/command:\s*(\S+)/);
+            if (!match) return print("pkg: no command name", "error");
+            const commandName = match[1];
+            const script = content
+              .split("\n")
+              .filter(l => !l.trim().startsWith("command:") && l.trim())
+              .map(l => l.trim());
+
+            const js = `
+commands["${commandName}"] = {
+  desc: "Installed via pkg",
+  async fn(args, print, fs, runCommand) {
+    const script = ${JSON.stringify(script)};
+    for (const line of script) {
+      await runCommand(line, print, fs, runCommand);
+    }
+  }
+};`;
+
+            fs.setNode(`/packages/${commandName}.js`, js);
+            print(`Created command '${commandName}'`);
+            return;
+          }
+
+          if (sub === "install") {
+            const file = args[1];
+            const url = `https://raw.githubusercontent.com/jhlbrothers2-stack/TSPOS/main/${file}`;
+            try {
+              const res = await fetch(url);
+              const code = await res.text();
+              fs.setNode(`/packages/${file}`, code);
+              print(`Installed ${file}`);
+            } catch (err) {
+              print("Install failed: " + err.message, "error");
+            }
+            return;
+          }
+
+          if (sub === "list") {
+            const list = fs.ls("/packages");
+            print("Packages:\n" + list.join("\n"));
+            return;
+          }
+
+          if (sub === "remove") {
+            const name = args[1];
+            fs.rm(`/packages/${name}`);
+            print(`Removed ${name}`);
+            return;
+          }
+
+          print(`Unknown subcommand: ${sub}`, "error");
+        }
+      }
+    };
+
+    // Register built-in commands
+    Object.assign(window.commands, builtinCommands);
+
+    // Load packages
+    const packages = fs.getNode("/packages");
+    for (const name in packages) {
+      try {
+        eval(packages[name]);
+        print(`Loaded: ${name}`, "success");
+      } catch (e) {
+        print(`Failed to load ${name}: ${e.message}`, "error");
+      }
+    }
+
+    // Handle user input
+    commandInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        const input = commandInput.value.trim();
+        commandInput.value = "";
+        print(`$ ${input}`);
+        await runCommand(input, print, fs, runCommand);
+      }
+    });
+
+    print("Welcome to TSPOS Starter! Type 'help' to begin.");
+  </script>
+</body>
+</html>
