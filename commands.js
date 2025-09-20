@@ -82,12 +82,15 @@ window.commands.cat = {
 
 window.commands.touch = {
   desc: "Create empty file or update timestamp",
-  fn(args, print, fs) {
-    const path = resolvePath(fs, args[0]);
-    const exists = fs.exists(path);
-    const content = exists ? fs.getNode(path) : "";
-    fs.setNode(path, content);
-    print(exists ? `Updated '${path}'` : `Created '${path}'`);
+  fn(args, print, fs, path) {
+    if (!args[0]) {
+      print("touch: missing filename", "error");
+      return;
+    }
+    const filePath = path.normalize(args[0]);  // ✅ use `path.normalize`, not `fs.normalize`
+
+    fs.writeFile(filePath, fs.exists(filePath) ? fs.readFile(filePath) : "");
+    print(`Touched ${filePath}`, "success");
   }
 };
 
