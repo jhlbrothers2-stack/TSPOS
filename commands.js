@@ -1,4 +1,4 @@
-// commands.js - Core TSPOS Commands
+// commands.js - Core TSPOS Commands for single-file setup
 window.commands = window.commands || {};
 window.cwd = "/"; // Global current working directory
 
@@ -13,24 +13,24 @@ function resolvePath(fs, path) {
   return fs.normalize(window.cwd + "/" + path);
 }
 
-commands.help = {
+window.commands.help = {
   desc: "Show this help message",
   fn(args, print) {
     print("Available commands:\n" +
-      Object.entries(commands)
+      Object.entries(window.commands)
         .map(([name, cmd]) => `  ${name.padEnd(12)} - ${cmd.desc || "No description"}`)
         .join("\n"));
   }
 };
 
-commands.echo = {
+window.commands.echo = {
   desc: "Print text to terminal",
   fn(args, print) {
     print(args.join(" "));
   }
 };
 
-commands.clear = {
+window.commands.clear = {
   desc: "Clear the terminal screen",
   fn(args, print) {
     const terminal = document.getElementById("terminal");
@@ -38,7 +38,7 @@ commands.clear = {
   }
 };
 
-commands.cd = {
+window.commands.cd = {
   desc: "Change directory",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0] || "/");
@@ -50,14 +50,14 @@ commands.cd = {
   }
 };
 
-commands.pwd = {
+window.commands.pwd = {
   desc: "Print working directory",
   fn(args, print) {
     print(window.cwd);
   }
 };
 
-commands.ls = {
+window.commands.ls = {
   desc: "List directory contents",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0] || ".");
@@ -69,7 +69,7 @@ commands.ls = {
   }
 };
 
-commands.cat = {
+window.commands.cat = {
   desc: "Show file contents",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -80,7 +80,7 @@ commands.cat = {
   }
 };
 
-commands.touch = {
+window.commands.touch = {
   desc: "Create empty file or update timestamp",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -91,7 +91,7 @@ commands.touch = {
   }
 };
 
-commands.mkdir = {
+window.commands.mkdir = {
   desc: "Create directory",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -101,7 +101,7 @@ commands.mkdir = {
   }
 };
 
-commands.rm = {
+window.commands.rm = {
   desc: "Remove file or directory",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -111,7 +111,7 @@ commands.rm = {
   }
 };
 
-commands.mv = {
+window.commands.mv = {
   desc: "Move or rename a file",
   fn(args, print, fs) {
     const [srcArg, destArg] = args;
@@ -125,7 +125,7 @@ commands.mv = {
   }
 };
 
-commands.cp = {
+window.commands.cp = {
   desc: "Copy a file",
   fn(args, print, fs) {
     const [srcArg, destArg] = args;
@@ -139,28 +139,28 @@ commands.cp = {
   }
 };
 
-commands.date = {
+window.commands.date = {
   desc: "Show current date and time",
   fn(args, print) {
     print(new Date().toString());
   }
 };
 
-commands.whoami = {
+window.commands.whoami = {
   desc: "Print current user",
   fn(args, print) {
     print("user");
   }
 };
 
-commands.exit = {
+window.commands.exit = {
   desc: "Reload shell",
   fn() {
     location.reload();
   }
 };
 
-commands.stat = {
+window.commands.stat = {
   desc: "Show file info",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -171,7 +171,7 @@ commands.stat = {
   }
 };
 
-commands.head = {
+window.commands.head = {
   desc: "Show first few lines of file",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -182,7 +182,7 @@ commands.head = {
   }
 };
 
-commands.tail = {
+window.commands.tail = {
   desc: "Show last few lines of file",
   fn(args, print, fs) {
     const path = resolvePath(fs, args[0]);
@@ -193,14 +193,14 @@ commands.tail = {
   }
 };
 
-commands.env = {
+window.commands.env = {
   desc: "List environment variables",
   fn(args, print) {
     print("USER=user\nSHELL=/bin/tsp\nEDITOR=mini");
   }
 };
 
-commands.history = {
+window.commands.history = {
   desc: "Show command history",
   fn(args, print) {
     if (window.commandHistory) {
@@ -211,7 +211,7 @@ commands.history = {
   }
 };
 
-commands.basename = {
+window.commands.basename = {
   desc: "Show filename from path",
   fn(args, print) {
     if (!args[0]) return print("basename: missing operand");
@@ -220,7 +220,7 @@ commands.basename = {
   }
 };
 
-commands.dirname = {
+window.commands.dirname = {
   desc: "Show directory name from path",
   fn(args, print) {
     if (!args[0]) return print("dirname: missing operand");
@@ -230,7 +230,7 @@ commands.dirname = {
   }
 };
 
-commands.alias = {
+window.commands.alias = {
   desc: "Define an alias (simulated)",
   fn(args, print) {
     print("aliasing not supported yet");
