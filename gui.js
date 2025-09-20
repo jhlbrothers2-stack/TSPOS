@@ -1,28 +1,85 @@
+// gui.js — TSPOS GUI package
+
+if (!window.commands) window.commands = {};
+if (!window.htmlFiles) window.htmlFiles = {};
+
 window.commands.gui = {
-  desc: "Launch GUI HTML window from stored .html file",
+  desc: "Run HTML GUI: gui run <file.html>",
   fn: (args, print) => {
-    const name = args[0];
-    if (!name) return print("Usage: gui <filename.html>", "error");
+    if (!args || args.length < 2 || args[0] !== "run") {
+      print("Usage: gui run <filename.html>");
+      return;
+    }
 
-    const html = window.htmlFiles?.[name];
-    if (!html) return print(`HTML file not found: ${name}`, "error");
+    const filename = args[1];
+    const html = window.htmlFiles[filename];
 
-    // Basic floating window
+    if (!html) {
+      print(`HTML file not found: ${filename}`, "error");
+      return;
+    }
+
     const win = document.createElement("div");
-    win.innerHTML = html;
-    Object.assign(win.style, {
-      position: "fixed",
-      top: "100px",
-      left: "100px",
-      width: "600px",
-      height: "400px",
-      background: "#fff",
-      border: "1px solid #999",
-      overflow: "auto",
-      zIndex: 1000,
-      padding: "8px"
-    });
+    win.style.position = "fixed";
+    win.style.top = "100px";
+    win.style.left = "100px";
+    win.style.width = "600px";
+    win.style.height = "400px";
+    win.style.border = "1px solid #ccc";
+    win.style.background = "#fff";
+    win.style.boxShadow = "0 0 12px rgba(0,0,0,0.5)";
+    win.style.zIndex = 10000;
+    win.style.overflow = "hidden";
+
+    const bar = document.createElement("div");
+    bar.style.background = "#444";
+    bar.style.color = "#fff";
+    bar.style.padding = "6px 12px";
+    bar.style.fontWeight = "bold";
+    bar.style.cursor = "move";
+    bar.style.display = "flex";
+    bar.style.justifyContent = "space-between";
+    bar.innerText = filename;
+
+    const close = document.createElement("button");
+    close.innerText = "×";
+    close.style.background = "red";
+    close.style.color = "white";
+    close.style.border = "none";
+    close.style.cursor = "pointer";
+    close.style.marginLeft = "auto";
+    close.onclick = () => win.remove();
+    bar.appendChild(close);
+
+    win.appendChild(bar);
+
+    const iframe = document.createElement("iframe");
+    iframe.style.width = "100%";
+    iframe.style.height = "calc(100% - 30px)";
+    iframe.style.border = "none";
+    iframe.srcdoc = html;
+
+    win.appendChild(iframe);
     document.body.appendChild(win);
-    print(`Opened ${name}`, "success");
+
+    // Dragging logic
+    let dragging = false, offsetX, offsetY;
+    bar.addEventListener("mousedown", e => {
+      dragging = true;
+      offsetX = e.clientX - win.offsetLeft;
+      offsetY = e.clientY - win.offsetTop;
+      document.body.style.userSelect = "none";
+    });
+    document.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      win.style.left = e.clientX - offsetX + "px";
+      win.style.top = e.clientY - offsetY + "px";
+    });
+    document.addEventListener("mouseup", () => {
+      dragging = false;
+      document.body.style.userSelect = "";
+    });
+
+    print(`GUI opened: ${filename}`, "success");
   }
 };
