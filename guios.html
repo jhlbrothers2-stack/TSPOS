@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GUIOS</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #1e1e1e;
+      font-family: sans-serif;
+      color: #eee;
+    }
+
+    #desktop {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 30px;
+      background: #2b2b2b;
+      overflow: hidden;
+    }
+
+    #taskbar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 30px;
+      background: #111;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 14px;
+    }
+
+    #taskbar .task {
+      margin-right: 10px;
+      padding: 3px 8px;
+      background: #333;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .window {
+      position: absolute;
+      top: 100px;
+      left: 100px;
+      width: 400px;
+      height: 300px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #555;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      resize: both;
+      overflow: hidden;
+    }
+
+    .titlebar {
+      background: #444;
+      color: #fff;
+      padding: 5px;
+      display: flex;
+      justify-content: space-between;
+      cursor: move;
+    }
+
+    .content {
+      flex: 1;
+      background: #fff;
+      overflow: auto;
+      padding: 5px;
+      font-size: 14px;
+    }
+
+    .btn {
+      background: red;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="desktop"></div>
+  <div id="taskbar"></div>
+
+  <script>
+    const desktop = document.getElementById("desktop");
+    const taskbar = document.getElementById("taskbar");
+    let zIndexCounter = 10;
+
+    window.installedApps = {
+      notes: {
+        name: "notes",
+        title: "Notes",
+        description: "Simple notepad",
+        html: "<textarea style='width:100%;height:100%;border:none;outline:none;'></textarea>"
+      },
+      clock: {
+        name: "clock",
+        title: "Clock",
+        description: "Shows current time",
+        html: "<div id='clock' style='font-size:2em;text-align:center;margin-top:20px;'></div><script>setInterval(()=>{document.getElementById('clock').innerText=new Date().toLocaleTimeString();},1000)<\/script>"
+      },
+      about: {
+        name: "about",
+        title: "About GUIOS",
+        description: "Info about the system",
+        html: "<h2>Welcome to GUIOS</h2><p>A lightweight JavaScript OS simulation.</p><p>Drag and drop .ipkg files to install apps.</p>"
+      }
+    };
+
+    function createWindow(app) {
+      const win = document.createElement("div");
+      win.className = "window";
+      win.style.zIndex = ++zIndexCounter;
+
+      const bar = document.createElement("div");
+      bar.className = "titlebar";
+      bar.innerHTML = `<span>${app.title}</span>`;
+      const close = document.createElement("button");
+      close.className = "btn";
+      close.textContent = "×";
+      close.onclick = () => {
+        desktop.removeChild(win);
+        taskbar.removeChild(taskBtn);
+      };
+      bar.appendChild(close);
+
+      const content = document.createElement("div");
+      content.className = "content";
+      content.innerHTML = app.html;
+
+      win.appendChild(bar);
+      win.appendChild(content);
+      desktop.appendChild(win);
+
+      // Dragging
+      let dragging = false, offsetX, offsetY;
+      bar.addEventListener("mousedown", e => {
+        dragging = true;
+        offsetX = e.clientX - win.offsetLeft;
+        offsetY = e.clientY - win.offsetTop;
+      });
+      document.addEventListener("mousemove", e => {
+        if (dragging) {
+          win.style.left = e.clientX - offsetX + "px";
+          win.style.top = e.clientY - offsetY + "px";
+        }
+      });
+      document.addEventListener("mouseup", () => dragging = false);
+
+      // Taskbar button
+      const taskBtn = document.createElement("div");
+      taskBtn.className = "task";
+      taskBtn.textContent = app.title;
+      taskBtn.onclick = () => {
+        win.style.zIndex = ++zIndexCounter;
+      };
+      taskbar.appendChild(taskBtn);
+
+      return win;
+    }
+
+    // Drag & drop installer for .ipkg
+    document.body.addEventListener("dragover", e => e.preventDefault());
+    document.body.addEventListener("drop", e => {
+      e.preventDefault();
+      for (let file of e.dataTransfer.files) {
+        if (file.name.endsWith(".ipkg")) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const pkg = JSON.parse(reader.result);
+              window.installedApps[pkg.name] = pkg;
+              alert("Installed app: " + pkg.title);
+            } catch {
+              alert("Invalid .ipkg file");
+            }
+          };
+          reader.readAsText(file);
+        }
+      }
+    });
+
+    // Boot: open About
+    createWindow(window.installedApps.about);
+  </script>
+</body>
+</html>
