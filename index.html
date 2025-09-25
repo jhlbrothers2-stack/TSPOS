@@ -1,109 +1,218 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TSPOS Terminal</title>
-<style>
-  body {
-    margin: 0; background: #1e1e1e; color: #eee; font-family: monospace;
-    display: flex; flex-direction: column; height: 100vh;
-  }
-  #terminal {
-    flex: 1 1 auto;
-    background: #252526;
-    padding: 12px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    box-sizing: border-box;
-  }
-  #input-area {
-    display: flex;
-    background: #333;
-    padding: 8px;
-    align-items: center;
-    flex-shrink: 0;
-  }
-  #input-area input[type="text"] {
-    flex: 1 1 auto;
-    background: #1e1e1e;
-    color: #eee;
-    border: none;
-    padding: 8px;
-    font-family: monospace;
-    font-size: 14px;
-    outline: none;
-  }
-  #input-area button {
-    margin-left: 8px;
-    background: #007acc;
-    border: none;
-    padding: 8px 12px;
-    color: white;
-    cursor: pointer;
-    font-size: 14px;
-    border-radius: 3px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Terminal + GUIOS</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: monospace;
+      background: #111;
+      color: #eee;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Terminal */
+    #terminal {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #000;
+      padding: 10px;
+    }
+
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+
+    #input-line {
+      display: flex;
+    }
+
+    #prompt {
+      color: #0f0;
+      margin-right: 5px;
+    }
+
+    #command {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #eee;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    /* GUIOS iframe */
+    #guios-frame {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      border: none;
+      z-index: 9999;
+      display: none;
+    }
+  </style>
 </head>
 <body>
+  <!-- Terminal -->
+  <div id="terminal">
+    <div id="output"></div>
+    <div id="input-line">
+      <span id="prompt">&gt;</span>
+      <input type="text" id="command" autofocus />
+    </div>
+  </div>
 
-<div id="terminal"></div>
+  <!-- GUIOS container -->
+  <iframe id="guios-frame" src=""></iframe>
 
-<div id="input-area">
-  <input type="text" id="command-input" autocomplete="off" placeholder="Type a command..." />
-  <button id="clear-btn">Clear</button>
-</div>
+  <script>
+    const output = document.getElementById("output");
+    const commandInput = document.getElementById("command");
+    const guiosFrame = document.getElementById("guios-frame");
 
-<script>
-  const terminal = document.getElementById("terminal");
-  const input = document.getElementById("command-input");
-  const clearBtn = document.getElementById("clear-btn");
+    window.commands = window.commands || {}; // global commands
+    window.files = {}; // in-memory FS
+    window.commandHistory = [];
+    let historyIndex = -1;
 
-  // Function to print output to terminal with auto scroll
-  function print(text, type = "normal") {
-    const line = document.createElement("div");
-    line.textContent = text;
+    function print(msg) {
+      const div = document.createElement("div");
+      div.textContent = msg;
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+    }
 
-    // Optional: color coding based on type
-    if (type === "error") line.style.color = "#ff5555";
-    else if (type === "success") line.style.color = "#55ff55";
-    else if (type === "info") line.style.color = "#55aaff";
+    function runCommand(input) {
+      if (!input.trim()) return;
+      window.commandHistory.push(input);
+      historyIndex = window.commandHistory.length;
 
-    terminal.appendChild(line);
+      print("> " + input);
 
-    // Auto scroll to bottom
-    terminal.scrollTop = terminal.scrollHeight;
-  }
+      const [cmd, ...args] = input.split(/\s+/);
 
-  // Clear button handler
-  clearBtn.addEventListener("click", () => {
-    terminal.innerHTML = "";
-    input.focus();
-  });
+      // Handle guios commands
+      if (cmd === "guios") {
+        const sub = args[0];
+        if (!sub) {
+          print("Usage: guios <run|exit|help>");
+          return;
+        }
 
-  // Example command processor (replace with your logic)
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      const cmd = input.value.trim();
-      if (!cmd) return;
+        if (sub === "run") {
+          document.getElementById("terminal").style.display = "none";
+          guiosFrame.src = "guios.html";
+          guiosFrame.style.display = "block";
+          print("Loading GUIOS desktop...");
+          return;
+        }
 
-      print(`> ${cmd}`, "info");
+        if (sub === "exit") {
+          guiosFrame.src = "";
+          guiosFrame.style.display = "none";
+          document.getElementById("terminal").style.display = "flex";
+          print("Exited GUIOS.");
+          return;
+        }
 
-      // Replace this with actual command processing
-      if (cmd === "clear") {
-        terminal.innerHTML = "";
-      } else {
-        print(`You typed: ${cmd}`);
+        if (sub === "help") {
+          print("GUIOS commands:");
+          print(" guios run     - start the GUIOS desktop");
+          print(" guios exit    - return to the terminal");
+          print(" guios help    - show this help");
+          return;
+        }
+
+        print("Unknown guios command: " + sub);
+        return;
       }
 
-      input.value = "";
+      // Run normal registered commands
+      const command = window.commands[cmd];
+      if (command) {
+        try {
+          command.fn(args, print, window.files);
+        } catch (e) {
+          print("Error: " + e.message);
+        }
+        return;
+      }
+
+      print("Unknown command: " + cmd);
     }
-  });
 
-  // Focus input on page load
-  input.focus();
-</script>
+    commandInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runCommand(commandInput.value);
+        commandInput.value = "";
+      } else if (e.key === "ArrowUp") {
+        if (historyIndex > 0) {
+          historyIndex--;
+          commandInput.value = window.commandHistory[historyIndex];
+        }
+        e.preventDefault();
+      } else if (e.key === "ArrowDown") {
+        if (historyIndex < window.commandHistory.length - 1) {
+          historyIndex++;
+          commandInput.value = window.commandHistory[historyIndex] || "";
+        } else {
+          historyIndex = window.commandHistory.length;
+          commandInput.value = "";
+        }
+        e.preventDefault();
+      }
+    });
 
+    // Drag + drop for files
+    function handleFiles(files) {
+      [...files].forEach(file => {
+        const ext = file.name.split(".").pop().toLowerCase();
+        const reader = new FileReader();
+
+        if (ext === "js") {
+          reader.onload = () => {
+            try {
+              eval(reader.result); // command should register into window.commands
+              print(`Loaded JS file: ${file.name}`);
+            } catch (err) {
+              print(`Error in ${file.name}: ${err.message}`);
+            }
+          };
+          reader.readAsText(file);
+        } else if (ext === "html") {
+          reader.onload = () => {
+            window.files[file.name] = {
+              type: "html",
+              content: reader.result,
+              size: file.size,
+              loadedAt: new Date().toLocaleString()
+            };
+            print(`Loaded HTML file: ${file.name}`);
+          };
+          reader.readAsText(file);
+        } else {
+          print(`Unsupported file type: ${file.name}`);
+        }
+      });
+    }
+
+    document.body.addEventListener("dragover", e => e.preventDefault());
+    document.body.addEventListener("drop", e => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+  </script>
 </body>
 </html>
